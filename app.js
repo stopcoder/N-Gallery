@@ -14,6 +14,7 @@ var config = require('./lib/config');
 var log = require('./lib/logger');
 var app = express();
 var conf = config.config;
+var bodyParser = require('body-parser');
 
 i18n.configure({
   locales:['zh', 'en'],
@@ -51,17 +52,20 @@ if ('development' == app.get('env')) {
   app.use(express.errorHandler());
 }
 
+app.use(bodyParser.urlencoded({ extended: true }));
+
 app.get('/', routes.index);
 app.get(/^\/album\/(.*)/, routes.album);
 app.get(/^\/folder\/(.*)/, routes.folder);
 app.get(/^\/root\/(.*)/, routes.album);
 app.get(/^\/local\/(.*)/, routes.local);
+app.post(/^\/select\//, routes.select);
 app.get('^/operationHandler', routes.operationHandler);
 app.get('^/users', user.list);
 
 exports.run = function (port) {
   config.validate(null);
-  
+
   http.createServer(app).listen(port, function () {
     console.log('Express server listening on port ' + port);
   });

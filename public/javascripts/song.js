@@ -51,6 +51,10 @@ var SelectItems = (function(global) {
       selClass = _this.sel['selected_class'],
       wrapperSelClass = _this.sel['wrapper_selected_class'],
 
+      path = $el[0].src.substr(window.location.origin.length + 1),
+
+      wasSelected = $el.hasClass(selClass),
+
       // 只存id中的数字
       id = +$el.attr('id').slice(_this.id_prefix.length),
 
@@ -72,18 +76,34 @@ var SelectItems = (function(global) {
     }
 
     } else {
-      if (!$el.hasClass(selClass)) {
-        $el.addClass(selClass);
-        $el.parent().addClass(wrapperSelClass);
-        _this.itemSelected.push(id);
-      } else {
-        $el.removeClass(selClass);
-        $el.parent().removeClass(wrapperSelClass);
-        _this.itemSelected.splice(_this.itemSelected.indexOf(id), 1);
-      }
+      $.ajax({
+        url: "/select/",
+        method: "POST",
+        data: {
+          path: path,
+          selected: !wasSelected
+        }
+      }).done(function(data) {
+        if (!wasSelected) {
+          $el.addClass(selClass);
+          $el.parent().addClass(wrapperSelClass);
+          _this.itemSelected.push(id);
+        } else {
+          $el.removeClass(selClass);
+          $el.parent().removeClass(wrapperSelClass);
+          _this.itemSelected.splice(_this.itemSelected.indexOf(id), 1);
+        }
+        _this.updateBadge();
+      }).fail(function() {
+        debugger;
+        alert("failed");
+      });
+
     }
 
-    _this.updateBadge();
+
+
+
 
   };
 
@@ -350,16 +370,16 @@ var SelectItems = (function(global) {
     $('#delete-OK').click(function(e) {
       e.preventDefault();
 
-      var success; 
-        
+      var success;
+
       // pic
       if (_this.type == 'pic') {
         success = _this.deleteSelect(function(id) {
           var src = $('#' + _this.id_prefix + id).attr('src');
           return src.slice(7);  // strip '/local/'
         }, 'pics_path', _this.type);
-      } 
-      
+      }
+
       // album
       else if (_this.type == 'album') {
         success = _this.deleteSelect(function (id) {
@@ -373,40 +393,40 @@ var SelectItems = (function(global) {
       } else {
         $(document).trigger('deleteSelectFail');
       }
-      
+
     });
-    
+
     // shortcut key enter to confirm delete operation
     var $modal = $(selectors.select_delete_modal);
     $modal.bind('keydown', 'return', function() {
       $('#delete-OK').click();
     });
-    
+
     // delete button, show delete modal first. Images will be deleted after user comfirmation
     selectors.select_delete && $(selectors.select_delete).click(function(e) {
       e.preventDefault();
 
       var success;
-      
+
       if (_this.type == 'pic') {
 
-        // delete confirmation warn  
+        // delete confirmation warn
         var $modal = $(selectors.select_delete_modal);
         if ($modal.length) {
           $modal.find('.modal-body').html(_this.itemSelected.length + ' images in total');
           $modal.modal();
 
           return;
-          
+
         } else {
           success = _this.deleteSelect(function(id) {
             var src = $('#' + _this.id_prefix + id).attr('src');
             return src.slice(7);  // strip '/local/'
           }, 'pics_path', _this.type);
         }
-         
-      } 
-      
+
+      }
+
       else if (_this.type == 'album') {
 
         // delete confirmation warn
@@ -428,13 +448,13 @@ var SelectItems = (function(global) {
           $modal.modal();
 
           return;
-                    
+
         } else {
           success = _this.deleteSelect(function(id) {
             var href = $('#' + _this.id_prefix + id).closest('.cover').attr('href');
             return {type: href.slice(1, href.indexOf('/', 1)), path: href.slice(href.indexOf('/', 1) + 1)};
           }, 'albums', _this.type);
-        }              
+        }
       }
 
       if (success) {
@@ -468,7 +488,7 @@ var SelectItems = (function(global) {
 
   SelectItems.prototype.bindHotKeys = function() {
 
-    // Optional，bind the shortcut keys 
+    // Optional，bind the shortcut keys
     // must be done after bindOperation function
     // =========================================
 
@@ -614,7 +634,7 @@ var ItemScroll = (function () {
 
     var node = nodes[num-1],
       windowHeight = window.innerHeight,
-      
+
       // 1/2(top + bottom) - 1/2*windowHeight
       scrTop = (node.top + node.bottom - this.margin - windowHeight) / 2;
 

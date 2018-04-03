@@ -2,20 +2,20 @@
  * GET galleries display page.
  * @module routes/index
  * ==============
- * 
+ *
  * Every local directory that passed in is considered as a "gallery base dir"
- * 
+ *
  * Each sub directory in under "gallery base dir" are considered as a gallery classified to three types
  * "album": alias gallery, a directory in which there are just images (no sub directories)
  * "folder": a directory in which there exists sub directories
  * "root": in fact it's the "gallery base dir" itself, the difference is that "root" directory exclude
  * the sub directories in "gallery base dir" so it only contains images in it
- * 
- * For instance: A is a "gallery base dir", B and C are sub dirs in it, 
- * there's a images A.jpg in A rather than in B or C. 
- * B has just images while C has both images and sub dirs. 
- * Thus, A is "root" with A.jpg in it, B is "album", C is "folder". 
- * 
+ *
+ * For instance: A is a "gallery base dir", B and C are sub dirs in it,
+ * there's a images A.jpg in A rather than in B or C.
+ * B has just images while C has both images and sub dirs.
+ * Thus, A is "root" with A.jpg in it, B is "album", C is "folder".
+ *
  */
 
 var fs = require('fs');
@@ -25,7 +25,8 @@ var imgSize = require('image-size');
 var conf = require('../lib/config').config;
 var log = require('../lib/logger');
 var reImgType = /(\.jpg|\.jpeg|\.gif|\.png)$/i;
-
+var nano = require('nano')('http://localhost:5984');
+var db = nano.db.use('gallery');
 
 /**
  * Home page
@@ -35,8 +36,8 @@ var reImgType = /(\.jpg|\.jpeg|\.gif|\.png)$/i;
 exports.index = function index(req, res) {
 
   var items = [];
-  var baseDirs = conf.album_base_dirs; 
-    
+  var baseDirs = conf.album_base_dirs;
+
   baseDirs.forEach(function(baseDir) {
     Array.prototype.push.apply(items, folderHandler(baseDir));
   });
@@ -57,7 +58,7 @@ exports.index = function index(req, res) {
     res.render('404', {content: msg, config: conf});
     return;
   }
-  
+
   var helpDir = __dirname + '/../doc/help';
   var helpFile;
   if (fs.existsSync(helpDir + '/help-' + conf.lang + '.ejs')) {
@@ -66,13 +67,13 @@ exports.index = function index(req, res) {
     helpFile = 'help.ejs';
   }
   var helpDoc = fs.readFileSync(helpDir + '/' + helpFile);
-  
+
   res.render('index', {
-    title: res.__('Home'), 
-    items: items, 
-    base_dirs: baseDirs, 
-    config: conf, 
-    help_doc: helpDoc, 
+    title: res.__('Home'),
+    items: items,
+    base_dirs: baseDirs,
+    config: conf,
+    help_doc: helpDoc,
     _blank: true
   });
 
@@ -91,7 +92,7 @@ exports.folder = function (req, res) {
   var title = path.basename(folder);
 
   // breadcrumb
-  
+
   var absPath = folder;
   var dirs = conf.album_base_dirs;
   var breadcrumb = undefined;
@@ -113,7 +114,7 @@ exports.folder = function (req, res) {
         url: baseUrl + nodePath
       });
     });
-    
+
     breadcrumb = {
       base_path: basePath,
       base_url: baseUrl + basePath,
@@ -136,11 +137,11 @@ exports.folder = function (req, res) {
     helpFile = 'help.ejs';
   }
   var helpDoc = fs.readFileSync(helpDir + '/' + helpFile);
-  
+
   res.render('index', {
-    title: title, 
-    items: items, 
-    config: conf, 
+    title: title,
+    items: items,
+    config: conf,
     breadcrumb: breadcrumb,
     help_doc: helpDoc,
     _blank: false
@@ -179,22 +180,23 @@ exports.album = function (req, res) {
     helpFile = 'help.ejs';
   }
   var helpDoc = fs.readFileSync(helpDir + '/' + helpFile);
-  
-  res.render('album', {
-    title: title,
-    items: result[0],
-    
-    is_writable: fsPlus.isWritableSync(album),
 
-    // url exclude query string
-    url: baseUrl,
+  Promise.all(result[0]).then(function(items) {
+    res.render('album', {
+      title: title,
+      items: items,
 
-    // total page number, current page number
-    page: {total: Math.ceil(result[1] / countPerPage), number: pn}, 
-    config: conf,
-    help_doc: helpDoc
+      is_writable: fsPlus.isWritableSync(album),
+
+      // url exclude query string
+      url: baseUrl,
+
+      // total page number, current page number
+      page: {total: Math.ceil(result[1] / countPerPage), number: pn},
+      config: conf,
+      help_doc: helpDoc
+    });
   });
-
 };
 
 
@@ -244,14 +246,14 @@ function folderHandler(baseDir) {
       if (curDir[0] == '.') {
         continue;
       }
-      
-      
+
+
       if (fs.statSync(absCurDir).isDirectory()) {
         var subFiles = fs.readdirSync(absCurDir);
         if (!subFiles.length) {
           continue;
         }
-        
+
         var isWritable = fsPlus.isWritableSync(absCurDir);
 
         // => /a/b
@@ -270,7 +272,7 @@ function folderHandler(baseDir) {
         // empty gallery
         if (!imgCount) {
 
-          // check if it is root gallery 
+          // check if it is root gallery
           if (i == files.length - 1) {
             continue;
           }
@@ -315,7 +317,7 @@ function folderHandler(baseDir) {
 
 
 /**
- * Get the image items of a gallery 
+ * Get the image items of a gallery
  * @param dirPath {string} - gallery directory absolute path
  * @param pn {number} - page number
  * @param countPerPage {number}
@@ -328,13 +330,26 @@ function albumHandler(dirPath, pn, countPerPage) {
   }
 
   var files = fs.readdirSync(dirPath);
-  var items = [];
   var start = 0;
   var end = files.length;
+  var promises = [];
 
   if (end > countPerPage) {
     start = (pn - 1) * countPerPage;
     end = start + countPerPage;
+  }
+
+  function checkSelectedStatus(item) {
+    return new Promise(function(resolve, reject) {
+      db.get(item['src'], function(error, body) {
+        if (error) {
+          item['selected'] = false;
+        } else {
+          item['selected'] = body.ops[body.ops.length - 1].selected;
+        }
+        resolve(item);
+      });
+    });
   }
 
   for (var i = start; i < end; i++) {
@@ -342,6 +357,7 @@ function albumHandler(dirPath, pn, countPerPage) {
       var item = {};
       var src = path.join(dirPath, files[i]);
       item['src'] = fsPlus.toLinuxPath('local/' + src);
+      promises.push(checkSelectedStatus(item));
       var stat = fs.statSync(src);
       try {
         var size = imgSize(src);
@@ -356,10 +372,40 @@ function albumHandler(dirPath, pn, countPerPage) {
       item['atime'] = stat.atime;
       item['mtime'] = stat.mtime;
       item['ctime'] = stat.ctime;
-      items.push(item);
     }
   }
 
-  return [items, files.length];
+  return [promises, files.length];
 
 }
+
+exports.select = function(req, res) {
+  var sPath = req.body.path,
+      bSelected = req.body.selected === "true";
+  db.get(sPath, function(err, body) {
+    if (err) { // the entry doesn't exist yet
+      body = {
+        _id: sPath,
+        ops: [
+          {
+            selected: bSelected,
+            timestamp: new Date().getTime()
+          }
+        ]
+      };
+    } else {
+      body.ops.push({
+        selected: bSelected,
+        timestamp: new Date().getTime()
+      });
+    }
+
+    db.insert(body, function(err, body) {
+      if (!err) {
+        res.send("success");
+      } else {
+        res.send("failure");
+      }
+    });
+  });
+};

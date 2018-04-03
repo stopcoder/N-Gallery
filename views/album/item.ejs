@@ -34,10 +34,18 @@
         </div>
     </div>
     <a href="#" class="img">
-        <div class="img-wrapper">
+        <div class="img-wrapper
+            <% if (item['selected']) { %>
+                img-wrapper-selected
+            <% } %>
+        ">
             <img src="/<%= item['src'] %>" id="<%= 'pic' + i %>"
                  data-width="<%= item['width'] %>" data-height="<%= item['height'] %>"
-                 data-original-title="操作"/>
+                 data-original-title="操作"
+                 <% if (item['selected']) { %>
+                    class="item-selected"
+                 <% } %>
+            />
         </div>
     </a>
     <button type="button" class="img-opr btn btn-danger btn-lg"><span class="glyphicon glyphicon-trash"></span>
